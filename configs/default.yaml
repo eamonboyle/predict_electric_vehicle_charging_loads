@@ -1,0 +1,54 @@
+data:
+  ev_charging_csv: datasets/EV charging reports.csv
+  traffic_csv: datasets/Local traffic distribution.csv
+  # Set when training.use_hourly_private_features is true:
+  hourly_private_csv: datasets/Hourly EV loads - Aggregated private.csv
+
+training:
+  random_state: 42
+  test_size: 0.2
+  # random | group_user (avoids splitting sessions from the same User_ID across train/test)
+  split_method: random
+  target: El_kWh
+  # El_kWh_per_hour divides by Duration_hours (rows with zero duration dropped upstream)
+  use_traffic: true
+  use_hourly_private_features: false
+
+mlp:
+  epochs: 4500
+  lr: 0.0007
+  hidden1: 56
+  hidden2: 26
+  weight_decay: 0.0
+  torch_seed: 42
+  val_fraction: 0.1
+  early_stopping_patience: 400
+
+hyperparam_search:
+  enabled: false
+  quick_epochs: 500
+  val_fraction: 0.2
+  grid:
+    lr: [0.0003, 0.0007, 0.001]
+    hidden1: [32, 56]
+
+cross_validation:
+  enabled: true
+  folds: 5
+  sklearn_models_only: true
+
+outputs:
+  model_path: models/mlp.pt
+  preprocessor_path: models/preprocessor.joblib
+  baselines_path: models/baselines.joblib
+  plots_dir: artifacts/plots
+  metrics_csv: runs/metrics.csv
+  log_runs: true
+
+evaluation:
+  permutation_importance_repeats: 10
+  plot: true
+  residual_intervals:
+    enabled: true
+    q_low: 0.05
+    q_high: 0.95

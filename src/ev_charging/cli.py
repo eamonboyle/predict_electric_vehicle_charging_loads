@@ -365,16 +365,26 @@ def cmd_cv_only(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_root(ap: argparse.ArgumentParser) -> None:
+    """Per-subcommand so `train ... --root .` works (global flags before subcommands are easy to get wrong)."""
+    ap.add_argument(
+        "--root",
+        default=".",
+        help="Project root directory (contains datasets/, configs/, etc.)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ev-charging", description="EV charging load prediction pipeline")
-    p.add_argument("--root", default=".", help="Project root (contains datasets/ and configs/)")
     sub = p.add_subparsers(dest="command", required=True)
 
     t = sub.add_parser("train", help="Train baselines + MLP and write artifacts")
+    _add_root(t)
     t.add_argument("--config", default="configs/default.yaml")
     t.set_defaults(func=cmd_train)
 
     pr = sub.add_parser("predict", help="Batch predict from a feature CSV")
+    _add_root(pr)
     pr.add_argument("--config", default="configs/default.yaml")
     pr.add_argument("--input", required=True)
     pr.add_argument("--output", required=True)
@@ -382,6 +392,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr.set_defaults(func=cmd_predict)
 
     ab = sub.add_parser("ablation", help="Traffic on/off comparison for sklearn baselines")
+    _add_root(ab)
     ab.add_argument("--config", default="configs/default.yaml")
     ab.add_argument(
         "--compare-traffic",
@@ -391,9 +402,11 @@ def build_parser() -> argparse.ArgumentParser:
     ab.set_defaults(func=cmd_ablation)
 
     ds = sub.add_parser("datasets-info", help="Describe optional datasets")
+    _add_root(ds)
     ds.set_defaults(func=cmd_datasets_info)
 
     cv = sub.add_parser("cv", help="Run cross-validation only (sklearn)")
+    _add_root(cv)
     cv.add_argument("--config", default="configs/default.yaml")
     cv.add_argument("--folds", type=int, default=None)
     cv.set_defaults(func=cmd_cv_only)

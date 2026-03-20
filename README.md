@@ -35,6 +35,8 @@ pip install -e ".[dev,api]"  # + streamlit already in dev extras
 
 ## Train (baselines + MLP + metrics + plots)
 
+Put `--root` **after** the subcommand (`train`, `predict`, …). Example:
+
 ```bash
 python -m ev_charging train --config configs/default.yaml --root .
 ```

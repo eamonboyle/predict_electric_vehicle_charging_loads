@@ -86,8 +86,8 @@ target/
 profile_default/
 ipython_config.py
 
-# pyenv
-.python-version
+# pyenv (optional: uncomment if local pyenv should not be committed)
+# .python-version
 
 # pipenv
 Pipfile.lock
@@ -137,3 +137,10 @@ cython_debug/
 
 # VS Code settings
 .vscode/
+
+# Trained models and experiment outputs (regenerate with ev-charging train)
+models/*.pth
+models/*.pt
+models/*.joblib
+artifacts/
+runs/

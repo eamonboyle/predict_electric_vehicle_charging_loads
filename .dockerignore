@@ -1,0 +1,10 @@
+.git
+.gitignore
+.venv
+__pycache__
+.pytest_cache
+artifacts
+runs
+*.pth
+*.pt
+.ipynb_checkpoints

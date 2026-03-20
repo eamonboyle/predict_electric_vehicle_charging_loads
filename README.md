@@ -1,73 +1,125 @@
 # Predicting Residential EV Charging Loads
 
-Predict electric vehicle charging loads (kWh) from Norwegian residential charging data using traffic features and a PyTorch neural network.
+Predict electric vehicle charging energy (**kWh** per session) from Norwegian residential charging data, traffic counts, and optional hourly aggregate features. The project ships as an installable Python package with a **CLI**, **tests**, **CI**, optional **FastAPI** and **Streamlit** entry points, and YAML **configuration**.
 
-## Overview
+**Supported Python:** 3.10–3.12 (see `.python-version` for the recommended 3.11).
 
-This project trains a regression model to estimate how much energy (`El_kWh`) is consumed per EV charging session. The model uses:
-
-- **EV charging reports** — plug-in/plug-out times, duration, user type, month, weekday
-- **Traffic data** — hourly vehicle counts at 5 nearby locations (hypothesis: traffic density may correlate with charging behavior)
-
-Pipeline: load and merge datasets → clean and encode → 80/20 train/test split → linear regression baseline → PyTorch MLP.
-
-## Project Structure
+## Repository layout
 
 ```
-predict_electric_vehicle_charging_loads/
-├── datasets/
-│   ├── EV charging reports.csv
-│   └── Local traffic distribution.csv
-├── models/
-│   └── model.pth              # Saved PyTorch model (created on run)
-├── predict_electric_vehicle_charging_loads.ipynb
-├── requirements.txt
-└── README.md
+.
+├── configs/default.yaml          # Paths, training, MLP, CV, outputs
+├── datasets/                     # CSV inputs (; delimiter, European decimals)
+├── docs/
+│   ├── DATASETS.md               # What each file is for
+│   └── FEATURES_AND_IMPROVEMENTS_PLAN.md
+├── models/                       # Generated: mlp.pt, preprocessor.joblib, baselines.joblib (see .gitignore)
+├── src/ev_charging/              # Library + CLI
+├── tests/
+├── predict_electric_vehicle_charging_loads.ipynb   # Original exploratory notebook
+├── streamlit_app.py
+├── Dockerfile
+├── pyproject.toml
+└── requirements.txt
 ```
 
 ## Setup
 
-1. Create a virtual environment (recommended):
-
-   ```bash
-   python -m venv .venv
-   .venv\Scripts\activate   # Windows
-   # source .venv/bin/activate   # macOS/Linux
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Usage
-
-Open and run the Jupyter notebook:
-
 ```bash
-jupyter notebook predict_electric_vehicle_charging_loads.ipynb
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev,api]"  # + streamlit already in dev extras
+# CPU-only PyTorch (optional, recommended on Linux CI):
+# pip install torch --index-url https://download.pytorch.org/whl/cpu
 ```
 
-Or use JupyterLab, VS Code, or Cursor. The notebook will:
+## Train (baselines + MLP + metrics + plots)
 
-1. Load EV charging and traffic data
-2. Merge on plug-in hour
-3. Clean and encode features
-4. Train a linear regression baseline
-5. Train a PyTorch MLP (56 → 26 → 1)
-6. Save the model to `models/model.pth`
+```bash
+python -m ev_charging train --config configs/default.yaml --root .
+```
 
-## Results
+Writes (by default):
 
-| Model              | Test MSE | √MSE (≈ avg error, kWh) |
-|--------------------|----------|--------------------------|
-| Linear regression  | ~121     | ~11                      |
-| Neural network     | ~118     | ~10.9                    |
+- `models/mlp.pt` — PyTorch weights + architecture metadata  
+- `models/preprocessor.joblib` — fitted encoders (train-only categories)  
+- `models/baselines.joblib` — sklearn baselines (dummy mean/median, linear regression, histogram GB)  
+- `artifacts/plots/` — predicted vs actual, residuals  
+- `runs/metrics.csv` — appended run metrics when `outputs.log_runs` is true  
 
-The neural network slightly outperforms the baseline. Possible extensions: different feature sets, architectures, learning rates, or training duration.
+Training includes **k-fold CV** on sklearn models (configurable), optional **hyperparameter search** for the MLP on a quick validation schedule, **permutation importance** for gradient boosting, and **residual quantile intervals** on the test set when a validation split is enabled.
 
-## Requirements
+## Batch prediction
 
-- Python 3.8+
-- numpy, pandas, matplotlib, torch, scikit-learn
+Prepare a CSV with the **same columns as the training feature table** (after merge, before encoding): `User_type`, `Duration_hours`, `month_plugin`, `weekdays_plugin`, traffic count columns (unless trained with `use_traffic: false`), optional `hourly_*` columns, and optional `El_kWh` / `target` for comparison. Delimiter defaults to `;`.
+
+```bash
+python -m ev_charging predict --config configs/default.yaml --root . \
+  --input path/to/sessions.csv --output path/to/out.csv
+```
+
+## Other CLI commands
+
+```bash
+python -m ev_charging cv --config configs/default.yaml          # sklearn CV only
+python -m ev_charging ablation --compare-traffic                # traffic on vs off (sklearn)
+python -m ev_charging datasets-info                             # optional CSV descriptions
+```
+
+## API (FastAPI)
+
+```bash
+export EV_CHARGING_ROOT="$(pwd)"
+uvicorn ev_charging.api:app --reload --port 8000
+```
+
+- `GET /health`  
+- `POST /predict/csv` — multipart file upload; `sep` query param (default `;`)
+
+## Streamlit
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Set `EV_CHARGING_ROOT` if not running from the repo root.
+
+## Docker
+
+Build and run the API (train artifacts must exist or be bind-mounted into `/app/models`):
+
+```bash
+docker build -t ev-charging-api .
+docker run -p 8000:8000 -v "$(pwd)/models:/app/models" ev-charging-api
+```
+
+## Configuration highlights
+
+| Key | Purpose |
+|-----|---------|
+| `training.split_method` | `random` or `group_user` (GroupShuffleSplit on `User_ID`) |
+| `training.target` | `El_kWh` or `El_kWh_per_hour` |
+| `training.use_traffic` | Ablation: drop traffic count columns |
+| `training.use_hourly_private_features` | Merge hourly private aggregates (set `data.hourly_private_csv`) |
+| `mlp.val_fraction` | Holdout from train for early stopping / residual intervals |
+| `hyperparam_search` | Small grid over learning rate and first hidden width |
+
+## Development
+
+```bash
+python3 -m ruff check src tests
+python3 -m pytest
+```
+
+## License
+
+MIT — see `LICENSE`. **Datasets:** confirm you may redistribute or document external provenance (see `docs/DATASETS.md`).
+
+## Original notebook results
+
+| Model | Test MSE | √MSE (≈ avg error, kWh) |
+|-------|----------|--------------------------|
+| Linear regression | ~121 | ~11 |
+| Neural network (notebook) | ~118 | ~10.9 |
+
+The packaged pipeline reproduces the same modeling idea with stricter preprocessing (encoder fit on train only), extra baselines, and evaluation tooling.

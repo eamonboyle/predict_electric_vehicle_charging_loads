@@ -89,3 +89,23 @@ This document outlines possible next steps for the **Predicting Residential EV C
 4. **Stretch:** Use extra datasets or ship inference CLI/API depending on audience (research vs. operations).
 
 This plan can be trimmed or reprioritized based on whether the goal is **publication-quality experiments**, **internal forecasting**, or **teaching/demos**.
+
+---
+
+## Implementation status (repository)
+
+The following items from this plan are implemented in code or docs:
+
+| Area | Delivered |
+|------|-----------|
+| Hygiene | `pyproject.toml` with bounded deps, `.python-version`, `LICENSE`, README aligned to tree, `.gitignore` for `models/*.{pt,pth,joblib}` and `artifacts/` |
+| Data | `ev_charging.data` loaders + validation; optional hourly private merge in `ev_charging.extra_data`; `docs/DATASETS.md` |
+| Splits | Configurable `random` / `group_user`; encoder fit on train only (`FeaturePreprocessor`) |
+| Modeling | Dummy mean/median, linear regression, histogram GB, MLP with val early stopping; optional hyperparam search; k-fold CV for sklearn |
+| Metrics | MSE, RMSE, MAE, R², MAPE; plots; permutation importance; residual quantile intervals |
+| Engineering | `src/ev_charging/` modules, `configs/default.yaml`, CLI (`python -m ev_charging`), tests, GitHub Actions CI |
+| Inference | `predict` subcommand, FastAPI `/predict/csv`, Streamlit upload UI |
+| Research | `ablation --compare-traffic`; `training.target: El_kWh_per_hour`; optional hourly features |
+| Container | `Dockerfile` for API |
+
+The original `predict_electric_vehicle_charging_loads.ipynb` is retained for exploration; `notebooks/quickstart.ipynb` shows minimal library usage.

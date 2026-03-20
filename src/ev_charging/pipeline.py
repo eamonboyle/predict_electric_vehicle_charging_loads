@@ -36,6 +36,39 @@ def load_merged_dataframe(cfg: dict[str, Any], project_root: Path) -> pd.DataFra
     return merged
 
 
+def build_prediction_table(
+    cfg: dict[str, Any],
+    project_root: Path,
+    *,
+    ev_csv: Path | str | None = None,
+    max_rows: int | None = None,
+) -> pd.DataFrame:
+    """Merge EV sessions with traffic (and optional hourly features) for batch prediction.
+
+    Output columns match what :func:`FeaturePreprocessor.transform` expects (no ``target`` column
+    required; include ``El_kWh`` only if you want to compare predictions to actuals).
+    """
+    data = cfg["data"]
+    tr = cfg["training"]
+    ev_path = Path(ev_csv) if ev_csv is not None else project_root / data["ev_charging_csv"]
+    ev = load_ev_charging_reports(ev_path)
+    if max_rows is not None:
+        ev = ev.head(int(max_rows))
+    traffic = load_traffic_reports(project_root / data["traffic_csv"])
+    merged = merge_ev_traffic(ev, traffic)
+    if tr.get("use_hourly_private_features"):
+        hp = data.get("hourly_private_csv")
+        if not hp:
+            raise ValueError("use_hourly_private_features requires data.hourly_private_csv")
+        hourly = hourly_private_for_merge(project_root / hp)
+        merged = merge_hourly_private_features(merged, hourly)
+    return prepare_merged_features_frame(
+        merged,
+        use_traffic=tr["use_traffic"],
+        keep_split_meta=False,
+    )
+
+
 def prepared_frame(cfg: dict[str, Any], merged: pd.DataFrame) -> pd.DataFrame:
     tr = cfg["training"]
     df = prepare_merged_features_frame(

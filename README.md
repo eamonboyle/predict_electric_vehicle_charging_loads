@@ -53,16 +53,28 @@ Training includes **k-fold CV** on sklearn models (configurable), optional **hyp
 
 ## Batch prediction
 
-Prepare a CSV with the **same columns as the training feature table** (after merge, before encoding): `User_type`, `Duration_hours`, `month_plugin`, `weekdays_plugin`, traffic count columns (unless trained with `use_traffic: false`), optional `hourly_*` columns, and optional `El_kWh` / `target` for comparison. Delimiter defaults to `;`.
+You need **trained artifacts** first (`python -m ev_charging train ...`), then a CSV in the **same shape as the training feature table** (after EV↔traffic merge, before one-hot encoding).
+
+### Easiest: build input from the bundled datasets
+
+This uses `configs/default.yaml` paths (`datasets/EV charging reports.csv` + traffic, and optional hourly merge if enabled in config):
 
 ```bash
-python -m ev_charging predict --config configs/default.yaml --root . \
-  --input path/to/sessions.csv --output path/to/out.csv
+python -m ev_charging build-predict-input --root . --output rows_to_score.csv --max-rows 100
+python -m ev_charging predict --root . --input rows_to_score.csv --output scored.csv
 ```
+
+- Include **`El_kWh`** in the input if you want actuals in the file for side‑by‑side comparison; the model still predicts from the other columns.
+- Default delimiter for `predict` is **`;`** (matches the project CSVs). Use `--sep ,` for comma-separated files.
+
+### Manual CSV
+
+Required columns (when `use_traffic: true`): `User_type`, `Duration_hours`, `month_plugin`, `weekdays_plugin`, the five traffic count columns (`KROPPAN BRU`, …), plus any `hourly_*` columns your preprocessor was fit with. Optional: `El_kWh` or `target` (for evaluation only).
 
 ## Other CLI commands
 
 ```bash
+python -m ev_charging build-predict-input --root . --output sample.csv --max-rows 50
 python -m ev_charging cv --config configs/default.yaml          # sklearn CV only
 python -m ev_charging ablation --compare-traffic                # traffic on vs off (sklearn)
 python -m ev_charging datasets-info                             # optional CSV descriptions

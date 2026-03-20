@@ -22,7 +22,7 @@ from ev_charging.evaluate import (
 )
 from ev_charging.extra_data import describe_extra_datasets
 from ev_charging.features import FeaturePreprocessor
-from ev_charging.pipeline import build_train_test_arrays
+from ev_charging.pipeline import build_prediction_table, build_train_test_arrays
 from ev_charging.train_mlp import (
     load_mlp_bundle,
     mlp_test_metrics,
@@ -231,6 +231,21 @@ def cmd_train(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_predict_input(args: argparse.Namespace) -> int:
+    cfg = load_config(args.config)
+    root = _project_root(args)
+    ev_arg = Path(args.ev).resolve() if args.ev else None
+    df = build_prediction_table(cfg, root, ev_csv=ev_arg, max_rows=args.max_rows)
+    out = Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sep = args.sep if args.sep is not None else ";"
+    df.to_csv(out, sep=sep, index=False)
+    print(
+        f"Wrote {out} ({len(df)} rows). Next: python -m ev_charging predict --root . --input {out} --output scored.csv"
+    )
+    return 0
+
+
 def cmd_predict(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     root = _project_root(args)
@@ -311,10 +326,7 @@ def cmd_ablation(args: argparse.Namespace) -> int:
     if len(results) == 2:
         on = next(r for r in results if r["use_traffic"])
         off = next(r for r in results if not r["use_traffic"])
-        print(
-            f"HistGB RMSE: with traffic={on['hgb_rmse']:.4f}, "
-            f"without={off['hgb_rmse']:.4f} (lower is better)"
-        )
+        print(f"HistGB RMSE: with traffic={on['hgb_rmse']:.4f}, without={off['hgb_rmse']:.4f} (lower is better)")
     return 0
 
 
@@ -383,12 +395,31 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--config", default="configs/default.yaml")
     t.set_defaults(func=cmd_train)
 
-    pr = sub.add_parser("predict", help="Batch predict from a feature CSV")
+    b = sub.add_parser(
+        "build-predict-input",
+        help="Build a CSV from EV + traffic (same merge as training) for use with predict",
+    )
+    _add_root(b)
+    b.add_argument("--config", default="configs/default.yaml")
+    b.add_argument(
+        "--ev",
+        default=None,
+        help="EV sessions CSV (default: data.ev_charging_csv from config)",
+    )
+    b.add_argument("--output", required=True, help="Output CSV path")
+    b.add_argument("--max-rows", type=int, default=None, help="Only use the first N sessions")
+    b.add_argument("--sep", default=";", help="Output delimiter")
+    b.set_defaults(func=cmd_build_predict_input)
+
+    pr = sub.add_parser(
+        "predict",
+        help="Batch predict from a feature CSV (see build-predict-input to generate one from raw data)",
+    )
     _add_root(pr)
     pr.add_argument("--config", default="configs/default.yaml")
     pr.add_argument("--input", required=True)
     pr.add_argument("--output", required=True)
-    pr.add_argument("--sep", default=None, help="CSV delimiter (default: comma, or ; for .csv heuristic)")
+    pr.add_argument("--sep", default=None, help="CSV delimiter (default: ;)")
     pr.set_defaults(func=cmd_predict)
 
     ab = sub.add_parser("ablation", help="Traffic on/off comparison for sklearn baselines")
